@@ -1,0 +1,153 @@
+--Case 1--
+--Cau 1--
+select customer_id,sum(price) as tong_chi
+from (SELECT s.*,m.price
+from sales as s
+INNER join menu as m
+on s.product_id = m.product_id) a
+group by customer_id
+
+
+--Cau 2--
+select customer_id,count(distinct order_date) as so_lan_den
+from sales
+group by customer_id
+
+--Cau 3--
+SELECT customer_id,product_name
+from (select s.*,m.product_name,DENSE_RANK() over (PARTITION by customer_id order by order_date) as stt
+from sales as s
+INNER join menu as m
+on s.product_id = m.product_id) a
+where stt = 1
+
+--cau 4--
+with b as (
+
+select top 1 product_id,count(customer_id) as so_lan_mua
+from sales as s
+GROUP by product_id
+ORDER by so_lan_mua DESC)
+
+select s.customer_id,s.product_id,COUNT(s.product_id) as so_lan_mua
+from sales as s
+RIGHT JOIN b
+on s.product_id = b.product_id
+group by s.customer_id,s.product_id
+
+--Cau 5--
+
+with b as (
+
+SELECT *,DENSE_RANK() over (PARTITION by customer_id order by so_lan_mua desc) as stt
+from (SELECT customer_id,product_id,COUNT(product_id) as so_lan_mua
+from sales
+GROUP by customer_id,product_id) a)
+
+SELECT b.customer_id,m.product_name,b.so_lan_mua
+from b
+INNER join menu as m
+on b.product_id = m.product_id
+where stt = 1
+
+
+
+--Cau 6--
+
+--Tu lam--
+with d as (
+
+select *,DENSE_RANK() over(PARTITION by customer_id order by order_date) as stt
+from (select * from (select * from sales
+where customer_id in (select customer_id FROM members)) c
+where customer_id = 'A'
+and order_date >= '2021-01-07'
+union all
+select * from (select * from sales
+where customer_id in (select customer_id FROM members)) c
+where customer_id = 'B'
+and order_date >= '2021-01-09') c)
+
+select d.customer_id,d.order_date,m.product_name from d
+inner join menu as m
+on m.product_id = d.product_id
+where stt = 1
+
+--Giai--
+WITH member_sales_cte AS 
+(
+   SELECT s.customer_id, m.join_date, s.order_date, s.product_id,
+      DENSE_RANK() OVER(PARTITION BY s.customer_id
+      ORDER BY s.order_date) AS rank
+   FROM sales AS s
+   JOIN members AS m
+      ON s.customer_id = m.customer_id
+   WHERE s.order_date >= m.join_date
+)
+
+SELECT s.customer_id, s.order_date, m2.product_name 
+FROM member_sales_cte AS s
+JOIN menu AS m2
+   ON s.product_id = m2.product_id
+WHERE rank = 1;
+
+--Cau 7--
+with a as (
+
+select s.*,m.join_date,DENSE_RANK() over(PARTITION by s.customer_id order by order_date desc) as rank
+from sales as s
+join members as m
+on s.customer_id = m.customer_id
+where s.order_date < join_date)
+
+select a.customer_id,a.order_date,u.product_name
+from a
+join menu as u
+on a.product_id = u.product_id
+where rank = 1
+
+--Cau 8--
+
+SELECT customer_id,COUNT(distinct product_id) as so_mh_mua,sum(price) as so_tien_chi
+from (select s.customer_id,m.join_date,s.order_date,s.product_id,m2.price
+from sales as s
+join members as m
+on s.customer_id = m.customer_id
+join menu as m2
+on s.product_id = m2.product_id
+where order_date < join_date ) d
+GROUP by customer_id
+
+--Cau 9--
+
+select customer_id,sum(total_point) as tong_diem
+from (select *,total_point = price * point_$
+
+from (select *, case
+   when product_name = 'sushi' THEN 20
+   ELSE 10
+end as point_$    
+from (SELECT s.*,mn.product_name,mn.price
+from sales as s
+join menu as mn
+on mn.product_id = s.product_id) a) b) c
+group by customer_id
+
+--Cau 10--
+select * FROM sales
+select * from members
+select * from menu
+
+select *, CASE
+   when customer_id = 'A' and order_date < join_date or order_date > datepart(day, join_date) + 7 then 10
+   when customer_id = 'A' and join_date <= order_date and order_date <= datepart(day, join_date) + 7 then 20
+   else 10
+end as point_$
+from (SELECT s.customer_id,s.order_date,mb.join_date,s.product_id,mn.product_name,mn.price
+from sales as s
+join members as mb
+on s.customer_id = mb.customer_id
+join menu as mn 
+on s.product_id = mn.product_id
+where s.customer_id in ('A','B') 
+and s.order_date < '2021-02-01') a
